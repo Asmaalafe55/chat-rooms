@@ -3,6 +3,7 @@ const http = require('http');
 const express = require('express');
 const socketio = require('socket.io');
 const formatMessage = require('./utils/messages');
+const { userJoin, getCurrentUser } = require('./utils/users');
 
 const app = express();
 const server = http.createServer(app);
@@ -15,24 +16,33 @@ const botName = 'Admin';
 
 // Run when client connects
 io.on('connection', (socket) => {
-  // Welcome current user (This is to single client)
-  socket.emit('message', formatMessage(botName, 'Welcome to ChatRooms!'));
+  socket.on('joinRoom', ({ username, room }) => {
+    const user = userJoin(socket.id, username, room);
 
-  // Brodcast when a user connects (This is to all clients except the client that connecting)
-  socket.broadcast.emit(
-    'message',
-    formatMessage(botName, 'A user has joined the chat')
-  );
+    socket.join(user.room);
+
+    // Welcome current user (This is to single client)
+    socket.emit('message', formatMessage(botName, 'Welcome to ChatRooms!'));
+
+    // Brodcast when a user connects (This is to all clients except the client that connecting)
+    socket.broadcast
+      .to(user.room)
+      .emit(
+        'message',
+        formatMessage(botName, `${user.username} has joined the chat`)
+      );
+  });
+
+  // Listen for chatMessage
+  socket.on('chatMessage', (msg) => {
+    const user = getCurrentUser(socket.id);
+    io.to(user.room).emit('message', formatMessage(user.username, msg));
+  });
 
   // Runs when client disconnects
   socket.on('disconnect', () => {
     // This to all clients in general
     io.emit('message', formatMessage(botName, 'A user has left the chat'));
-  });
-
-  // Listen for chatMessage
-  socket.on('chatMessage', (msg) => {
-    io.emit('message', formatMessage('USER', msg));
   });
 });
 
